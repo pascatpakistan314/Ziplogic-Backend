@@ -1,0 +1,4 @@
+# Authentication dependencies for FastAPI backend
+PyJWT==2.8.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6

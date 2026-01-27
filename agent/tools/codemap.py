@@ -1,7 +1,63 @@
-from typing import Optional
+"""
+Code analysis tools with improved encoding detection, error handling, and automatic project directory detection.
 
+Features:
+- Automatically resolves relative paths to project directory
+- Falls back to workspace/cwd if project not set
+- Improved encoding detection with chardet
+- Support for Python, JavaScript, TypeScript files
+- Extract function/class definitions with line numbers
+- Get full function implementations
+"""
+from typing import Optional
+from pathlib import Path
+import os
 from langchain_core.tools import tool
 from tree_sitter_languages import get_language, get_parser
+import chardet
+from agent.utils.paths import get_project_directory, get_workspace_path
+
+
+def resolve_file_path(file_path: str) -> str:
+    """
+    Resolve file path to absolute path.
+    
+    Priority:
+      1. If path is absolute -> return as-is
+      2. If path is relative -> resolve relative to project directory
+      3. Fallback to workspace, then cwd
+    
+    Args:
+        file_path: Path to resolve (relative or absolute)
+    
+    Returns:
+        Absolute path as string
+    """
+    # If already absolute, return as-is
+    if os.path.isabs(file_path):
+        return file_path
+    
+    # Try to resolve relative to project directory
+    try:
+        project_dir = get_project_directory()
+        resolved = (Path(project_dir) / file_path).resolve()
+        if resolved.exists():
+            return str(resolved)
+    except Exception:
+        pass
+    
+    # Fallback to workspace
+    try:
+        workspace = get_workspace_path()
+        resolved = (Path(workspace) / file_path).resolve()
+        if resolved.exists():
+            return str(resolved)
+    except Exception:
+        pass
+    
+    # Ultimate fallback to current working directory
+    return str(Path(file_path).resolve())
+
 
 @tool(parse_docstring=True)
 def get_code_definitions(file_path: str) -> str:
@@ -10,10 +66,13 @@ def get_code_definitions(file_path: str) -> str:
     Shows signatures with their actual source file line numbers and ... between definitions.
 
     Args:
-        file_path: Path to the source file to analyze
+        file_path: Path to the source file to analyze (relative paths resolve to project directory)
     """
+    # Resolve path
+    full_path = resolve_file_path(file_path)
+    
     # Determine language
-    suffix = file_path.split(".")[-1]
+    suffix = full_path.split(".")[-1]
     lang_map = {
         "py": "python",
         "js": "javascript",
@@ -25,13 +84,45 @@ def get_code_definitions(file_path: str) -> str:
     if not lang:
         return f"Unsupported file type: {suffix}"
 
-    # Initialize parser
-    language = get_language(lang)
-    parser = get_parser(lang)
+    # Initialize parser - handle different tree-sitter-languages API versions
+    try:
+        language = get_language(lang)
+        parser = get_parser(lang)
+    except TypeError as e:
+        # API change in tree-sitter-languages - try alternative initialization
+        try:
+            from tree_sitter import Language, Parser
+            import tree_sitter_languages
 
-    # Read file content
-    with open(file_path, "rb") as f:
-        code = f.read()
+            # Try getting language by attribute access
+            lang_obj = getattr(tree_sitter_languages, f"get_{lang}", None)
+            if lang_obj:
+                language = lang_obj()
+                parser = Parser()
+                parser.set_language(language)
+            else:
+                return f"Error initializing tree-sitter for {lang}: {str(e)}\nPlease update tree-sitter-languages: pip install --upgrade tree-sitter-languages"
+        except Exception as inner_e:
+            return f"Error initializing tree-sitter for {lang}: {str(e)}\nInner error: {str(inner_e)}\nPlease update tree-sitter-languages: pip install --upgrade tree-sitter-languages"
+    except Exception as e:
+        return f"Error initializing tree-sitter for {lang}: {str(e)}"
+
+    # Read file content with encoding detection
+    try:
+        with open(full_path, "rb") as f:
+            raw_content = f.read()
+        
+        # Detect encoding
+        detected = chardet.detect(raw_content)
+        encoding = detected.get('encoding', 'utf-8')
+        
+        # For tree-sitter, we need bytes
+        code = raw_content
+    except FileNotFoundError:
+        return f"File not found: {full_path}"
+    except Exception as e:
+        return f"Error reading file {full_path}: {str(e)}"
+    
     tree = parser.parse(code)
 
     # Define query for functions and classes
@@ -53,7 +144,7 @@ def get_code_definitions(file_path: str) -> str:
     captures = query.captures(tree.root_node)
 
     # Process captures to extract definitions
-    output_lines = [f"\n{file_path}:\n"]
+    output_lines = [f"\n{full_path}:\n"]
     current_def = {}
     in_class = False
     last_line_number = 0
@@ -67,14 +158,14 @@ def get_code_definitions(file_path: str) -> str:
 
         if tag == "name.definition.class":
             in_class = True
-            output_lines.append(f"{current_line}| class {node.text.decode('utf-8')}:")
+            output_lines.append(f"{current_line}| class {node.text.decode('utf-8', errors='replace')}:")
             last_line_number = current_line
         elif tag == "name.definition.method" and in_class:
-            method_name = node.text.decode('utf-8')
+            method_name = node.text.decode('utf-8', errors='replace')
             current_def['method_name'] = method_name
             current_def['line'] = current_line
         elif tag == "params.definition.method" and in_class:
-            params = node.text.decode('utf-8')
+            params = node.text.decode('utf-8', errors='replace')
             line_num = current_def['line']
             output_lines.append(f"{line_num}|     def {current_def['method_name']}{params}:")
             last_line_number = line_num
@@ -85,10 +176,10 @@ def get_code_definitions(file_path: str) -> str:
         elif tag == "body.definition.class":
             in_class = False
         elif tag == "name.definition.function":
-            current_def['name'] = node.text.decode('utf-8')
+            current_def['name'] = node.text.decode('utf-8', errors='replace')
             current_def['line'] = current_line
         elif tag == "params.definition.function":
-            params = node.text.decode('utf-8')
+            params = node.text.decode('utf-8', errors='replace')
             line_num = current_def['line']
             output_lines.append(f"{line_num}| def {current_def['name']}{params}:")
             last_line_number = line_num
@@ -99,17 +190,21 @@ def get_code_definitions(file_path: str) -> str:
 
     return "\n".join(output_lines)
 
+
 @tool(parse_docstring=True)
 def get_function_implementation(file_path: str, function_name: str) -> Optional[str]:
     """
     Extract the implementation of a specific function or method from a file.
 
     Args:
-        file_path: Path to the source file
+        file_path: Path to the source file (relative paths resolve to project directory)
         function_name: Name of the function to find
     """
+    # Resolve path
+    full_path = resolve_file_path(file_path)
+    
     # Determine language
-    suffix = file_path.split(".")[-1]
+    suffix = full_path.split(".")[-1]
     lang_map = {
         "py": "python",
         "js": "javascript",
@@ -121,13 +216,41 @@ def get_function_implementation(file_path: str, function_name: str) -> Optional[
     if not lang:
         return None
 
-    # Initialize parser
-    language = get_language(lang)
-    parser = get_parser(lang)
+    # Initialize parser - handle different tree-sitter-languages API versions
+    try:
+        language = get_language(lang)
+        parser = get_parser(lang)
+    except TypeError as e:
+        try:
+            from tree_sitter import Language, Parser
+            import tree_sitter_languages
+            lang_obj = getattr(tree_sitter_languages, f"get_{lang}", None)
+            if lang_obj:
+                language = lang_obj()
+                parser = Parser()
+                parser.set_language(language)
+            else:
+                return f"Error initializing tree-sitter for {lang}: {str(e)}"
+        except Exception as inner_e:
+            return f"Error initializing tree-sitter: {str(e)}, {str(inner_e)}"
+    except Exception as e:
+        return f"Error initializing tree-sitter for {lang}: {str(e)}"
 
-    # Read file content
-    with open(file_path, "rb") as f:
-        code = f.read()
+    # Read file content with encoding detection
+    try:
+        with open(full_path, "rb") as f:
+            raw_content = f.read()
+        
+        # Detect encoding
+        detected = chardet.detect(raw_content)
+        encoding = detected.get('encoding', 'utf-8')
+        
+        code = raw_content  # tree-sitter needs bytes
+    except FileNotFoundError:
+        return f"File not found: {full_path}"
+    except Exception as e:
+        return f"Error reading file {full_path}: {str(e)}"
+    
     tree = parser.parse(code)
 
     # Define query for functions and methods
@@ -152,18 +275,18 @@ def get_function_implementation(file_path: str, function_name: str) -> Optional[
     current_def = {}
     for node, tag in captures:
         if tag in ["name.function", "name.method"]:
-            if node.text.decode('utf-8') == function_name:
-                current_def['name'] = node.text.decode('utf-8')
+            if node.text.decode('utf-8', errors='replace') == function_name:
+                current_def['name'] = node.text.decode('utf-8', errors='replace')
                 current_def['line'] = node.start_point[0] + 1
         elif tag in ["params.function", "params.method"] and current_def.get('name') == function_name:
-            current_def['params'] = node.text.decode('utf-8')
+            current_def['params'] = node.text.decode('utf-8', errors='replace')
         elif tag in ["body.function", "body.method"] and current_def.get('name') == function_name:
             # Extract the full implementation
-            implementation = code[node.start_byte:node.end_byte].decode('utf-8')
+            implementation = code[node.start_byte:node.end_byte].decode(encoding, errors='replace')
             lines = implementation.split('\n')
             
             # Format output
-            output_lines = [f"\n{file_path}:\n"]
+            output_lines = [f"\n{full_path}:\n"]
             start_line = current_def['line']
             
             # Add function signature
@@ -180,6 +303,7 @@ def get_function_implementation(file_path: str, function_name: str) -> Optional[
 
     return None
 
+
 @tool(parse_docstring=True)
 def get_code_definitions_multi(file_paths: list[str]) -> str:
     """
@@ -187,49 +311,65 @@ def get_code_definitions_multi(file_paths: list[str]) -> str:
     Shows signatures with their actual source file line numbers and ... between definitions.
     
     Args:
-        file_paths: List of file paths to analyze
-     """
+        file_paths: List of file paths to analyze (relative paths resolve to project directory)
+    """
     all_definitions = []
     
     for file_path in file_paths:
         definitions = get_code_definitions(file_path)
-        if definitions and not definitions.startswith("Unsupported"):
+        if definitions and not definitions.startswith("Unsupported") and not definitions.startswith("Error"):
             all_definitions.append(definitions)
     
-    return "\n".join(all_definitions)
+    return "\n".join(all_definitions) if all_definitions else "No definitions found in provided files"
+
 
 @tool(parse_docstring=True)
 def get_raw_file_content(file_path: str) -> str:
     """
-    Get the raw content of the file. good for a non-code files
+    Get the raw content of the file with automatic encoding detection.
+    Good for non-code files or when you need the exact content.
     
     Args:
-        file_path: file path to read
-     """
-    with open(file_path, "rb") as f:
-        return f.read().decode('utf-8')
+        file_path: File path to read (relative paths resolve to project directory)
+    """
+    # Resolve path
+    full_path = resolve_file_path(file_path)
+    
+    try:
+        # Read as binary first
+        with open(full_path, "rb") as f:
+            raw_content = f.read()
+        
+        # Detect encoding
+        detected = chardet.detect(raw_content)
+        encoding = detected.get('encoding', 'utf-8')
+        confidence = detected.get('confidence', 0)
+        
+        # If low confidence or None, try common encodings
+        if not encoding or confidence < 0.7:
+            encodings_to_try = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'iso-8859-1']
+            for enc in encodings_to_try:
+                try:
+                    return raw_content.decode(enc)
+                except (UnicodeDecodeError, AttributeError):
+                    continue
+            # If all fail, use utf-8 with error replacement
+            return raw_content.decode('utf-8', errors='replace')
+        
+        # Use detected encoding
+        return raw_content.decode(encoding, errors='replace')
+        
+    except FileNotFoundError:
+        return f"File not found: {full_path}"
+    except Exception as e:
+        return f"Error reading file {full_path}: {str(e)}"
+
 
 # List of available tools
-codemap_tools = [get_code_definitions, get_function_implementation, get_code_definitions_multi, get_raw_file_content]
+codemap_tools = [
+    get_code_definitions,
+    get_function_implementation,
+    get_code_definitions_multi,
+    get_raw_file_content
+]
 codemap_tools_map = {tool.name: tool for tool in codemap_tools}
-
-def main():
-    # Example usage
-    file_path = "../../agent/tools/codemap.py"  # Using this file as an example
-    code_map = get_code_definitions.invoke({"file_path":file_path})
-    print(code_map)
-
-    # Get specific function implementation
-    implementation = get_function_implementation.invoke({"file_path":file_path, "function_name":"get_code_definitions"})
-    print(implementation)
-    
-    # Example of multi-file definitions
-    files = ["../../agent/tools/codemap.py", "../../agent/tools/search.py"]
-    multi_defs = get_code_definitions_multi.invoke({"file_paths":files})
-    print(multi_defs)
-
-if __name__ == "__main__":
-    main()
-
-
-

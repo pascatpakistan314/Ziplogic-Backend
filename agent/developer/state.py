@@ -1,4 +1,4 @@
-from typing import Annotated, List, Optional, Literal
+from typing import Annotated, List, Optional, Literal, Dict
 
 from langgraph.graph.message import Messages
 
@@ -33,3 +33,5 @@ class SoftwareDeveloperState(BaseModel):
     atomic_implementation_research: Annotated[list[AnyMessage], add_messages_with_clear]
     codebase_structure: Optional[str] = Field(None, description="The codebase structure")
     current_file_content: Optional[str] = Field(None, description="The current content of the file being edited")
+    workspace_path: Optional[str] = Field(None, description="The workspace directory path for file operations")
+    step_counter: Dict[str, int] = Field(default_factory=dict, description="Tracks steps per atomic task to prevent infinite loops")
