@@ -27,8 +27,8 @@ def generate_env_example():
             env_key = line.split('=')[0].strip()
             placeholder = ""
             processed_env_lines.append(f'{env_key}={placeholder}')
-    
-    with open(target_env_example, 'w') as env_target:
+
+    with open(target_env_example, 'w', encoding='utf-8') as env_target:
         env_target.write('\n'.join(processed_env_lines) + '\n')
     
     print('.env.example generated successfully!')

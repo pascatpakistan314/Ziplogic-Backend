@@ -1,0 +1,35 @@
+[
+  {
+    "edit_type": "search_replace",
+    "file_path": "C:\\Users\\LENOVO\\OneDrive\\Documents\\swe-agent2122\\swe-agent2\\swe-agent2\\workspace_repo\\project_1761452034551\\src\\main.js",
+    "start_line": null,
+    "end_line": null,
+    "search_pattern": "  // Reveal on scroll using IntersectionObserver\r\n  const revealObserver = new IntersectionObserver((entries, obs) => {\r\n    entries.forEach(entry => {\r\n      if (entry.isIntersecting) {\r\n        entry.target.classList.add('reveal-active');\r\n        obs.unobserve(entry.target);\r\n      }\r\n    });\r\n  }, { threshold: 0.15 });\r\n\r\n  document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));",
+    "replacement": "  // Reveal on scroll using IntersectionObserver (with feature detection)\r\n  if ('IntersectionObserver' in window) {\r\n    const revealObserver = new IntersectionObserver((entries, obs) => {\r\n      entries.forEach(entry => {\r\n        if (entry.isIntersecting) {\r\n          entry.target.classList.add('reveal-active');\r\n          obs.unobserve(entry.target);\r\n        }\r\n      });\r\n    }, { threshold: 0.15 });\r\n\r\n    document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));\r\n  } else {\r\n    document.querySelectorAll('.reveal').forEach(el => el.classList.add('reveal-active'));\r\n  }",
+    "new_content": null,
+    "after_line": null,
+    "reasoning": "Add feature detection and a fallback for IntersectionObserver to prevent runtime errors in unsupported environments."
+  },
+  {
+    "edit_type": "search_replace",
+    "file_path": "C:\\Users\\LENOVO\\OneDrive\\Documents\\swe-agent2122\\swe-agent2\\swe-agent2\\workspace_repo\\project_1761452034551\\src\\main.js",
+    "start_line": null,
+    "end_line": null,
+    "search_pattern": "  if (!toggleBtn || !mobileMenu) return;\r\n\r\n  toggleBtn.addEventListener('click', () => {\r\n    mobileMenu.classList.toggle('hidden');\r\n  });\r\n\r\n  // Close the menu when a mobile nav link is clicked\r\n  mobileMenu.querySelectorAll('a').forEach(link => {\r\n    link.addEventListener('click', () => {\r\n      mobileMenu.classList.add('hidden');\r\n    });\r\n  });",
+    "replacement": "  if (toggleBtn && mobileMenu) {\r\n    toggleBtn.addEventListener('click', () => {\r\n      mobileMenu.classList.toggle('hidden');\r\n    });\r\n  }\r\n\r\n  if (mobileMenu) {\r\n    // Close the menu when a mobile nav link is clicked\r\n    mobileMenu.querySelectorAll('a').forEach(link => {\r\n      link.addEventListener('click', () => {\r\n        mobileMenu.classList.add('hidden');\r\n      });\r\n    });\r\n  }",
+    "new_content": null,
+    "after_line": null,
+    "reasoning": "Remove overly broad early return and guard behaviors independently so link-close still works even if the toggle button is absent."
+  },
+  {
+    "edit_type": "search_replace",
+    "file_path": "C:\\Users\\LENOVO\\OneDrive\\Documents\\swe-agent2122\\swe-agent2\\swe-agent2\\workspace_repo\\project_1761452034551\\src\\main.js",
+    "start_line": null,
+    "end_line": null,
+    "search_pattern": "  // Reveal on scroll using IntersectionObserver (with feature detection)\r\n  if ('IntersectionObserver' in window) {\r\n    const revealObserver = new IntersectionObserver((entries, obs) => {\r\n      entries.forEach(entry => {\r\n        if (entry.isIntersecting) {\r\n          entry.target.classList.add('reveal-active');\r\n          obs.unobserve(entry.target);\r\n        }\r\n      });\r\n    }, { threshold: 0.15 });\r\n\r\n    document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));\r\n  } else {\r\n    document.querySelectorAll('.reveal').forEach(el => el.classList.add('reveal-active'));\r\n  }",
+    "replacement": "  // Reveal on scroll using IntersectionObserver (with feature detection)\r\n  if ('IntersectionObserver' in window) {\r\n    const revealObserver = new IntersectionObserver((entries, observer) => {\r\n      entries.forEach(entry => {\r\n        if (entry.isIntersecting) {\r\n          entry.target.classList.add('reveal-active');\r\n          observer.unobserve(entry.target);\r\n        }\r\n      });\r\n    }, { threshold: 0.15 });\r\n\r\n    document.querySelectorAll('.reveal').forEach(element => revealObserver.observe(element));\r\n  } else {\r\n    document.querySelectorAll('.reveal').forEach(element => element.classList.add('reveal-active'));\r\n  }",
+    "new_content": null,
+    "after_line": null,
+    "reasoning": "Improve naming clarity by renaming obs to observer and el to element for readability."
+  }
+]

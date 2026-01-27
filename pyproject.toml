@@ -1,18 +1,68 @@
 [project]
 name = "swe-agent-langgraph"
-version = "0.1.0"
-description = "Add your description here"
+version = "2.0.0"
+description = "Enhanced AI-powered Software Engineering Agent with comprehensive capabilities"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    # Core dependencies
     "langchain-anthropic>=0.3.5",
     "langgraph>=0.2.69",
     "langgraph-cli[inmem]>=0.2",
     "langsmith>=0.2.11",
+    
+    # Code analysis
     "gitingest>=0.1.2",
     "tree-sitter-languages>=1.10.2",
     "tree-sitter==0.21.3",
     "diff-match-patch>=20241021",
     "thefuzz>=0.22.1",
     "fuzzysearch>=0.7.3",
+    
+    # API server
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "websockets>=12.0",
+    "pydantic>=2.0.0",
+    
+    # Testing tools
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.0",
+    "coverage>=7.3.0",
+    "factory-boy>=3.3.0",
+    "faker>=20.0.0",
+    
+    # Code quality
+    "pylint>=3.0.0",
+    "flake8>=6.0.0",
+    "black>=23.0.0",
+    "mypy>=1.5.0",
+    "radon>=6.0.0",
+    "bandit>=1.7.0",
+    
+    # Security scanning
+    "safety>=2.3.0",
+    
+    # Documentation
+    "sphinx>=7.0.0",
+    "mkdocs>=1.5.0",
+    
+    # Git operations
+    "gitpython>=3.1.0",
+    
+    # Additional utilities
+    "redis>=5.0.0",
+    "python-dotenv>=1.0.0",
+    "click>=8.1.0",
+    "rich>=13.0.0",
+    "httpx>=0.25.0"
 ]
+
+[project.scripts]
+swe-agent = "cli:main"
+swe-server = "api_server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
